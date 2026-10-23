@@ -61,5 +61,6 @@ jobs:
             ldd --version | head -1
             ./wecom-excel-mcp --version | grep "decoder: rust"
             if command -v dnf >/dev/null; then dnf install -y -q python39 >/dev/null; py=python3.9
-            else apt-get update -qq && apt-get install -y -qq python3 >/dev/null; py=python3; fi
+            else grep -q buster /etc/os-release && echo "deb http://archive.debian.org/debian buster main" > /etc/apt/sources.list
+              apt-get update -qq && apt-get install -y -qq python3 >/dev/null; py=python3; fi
             $py packaging/smoke_test.py ./wecom-excel-mcp'
