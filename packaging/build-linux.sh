@@ -8,7 +8,7 @@ cd "$(dirname "$0")/.."
 dnf install -y -q python3.12 python3.12-devel python3.12-pip >/dev/null
 curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
 . "$HOME/.cargo/env"
-python3.12 -m venv /tmp/venv
+/usr/bin/python3.12 -m venv /tmp/venv  # not python3.12 on PATH: manylinux links its own there
 . /tmp/venv/bin/activate
 pip install -q --upgrade pip
 pip install -q . pyinstaller

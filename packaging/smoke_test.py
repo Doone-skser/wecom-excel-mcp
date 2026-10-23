@@ -27,8 +27,10 @@ def get(path: str, data: bytes | None = None, headers: dict | None = None) -> tu
 def main() -> None:
     exe = os.path.abspath(sys.argv[1])
     data = tempfile.mkdtemp()
-    proc = subprocess.Popen([exe, "serve", "--port", str(PORT), "--data-dir", data],
-                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    log = open(os.path.join(data, "server.log"), "w+b")
+    # output to a file, not a pipe: a onefile executable runs as two processes, and the inner one would keep a
+    # pipe open after the outer one is gone
+    proc = subprocess.Popen([exe, "serve", "--port", str(PORT), "--data-dir", data], stdout=log, stderr=subprocess.STDOUT)
     try:
         for _ in range(120):
             try:
@@ -52,13 +54,16 @@ def main() -> None:
         assert all(t in body for t in ("list_sheets", "read_sheet", "search_sheet", "get_images")), body
         print("smoke test passed")
     finally:
-        proc.terminate()
+        if os.name == "nt":
+            subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)], capture_output=True)
+        else:
+            proc.terminate()
         try:
-            out = proc.communicate(timeout=10)[0].decode(errors="replace")
+            proc.wait(timeout=15)
         except subprocess.TimeoutExpired:
             proc.kill()
-            out = proc.communicate()[0].decode(errors="replace")
-        print(out[-3000:])
+        log.seek(0)
+        print(log.read().decode(errors="replace")[-3000:])
     version = subprocess.run([exe, "--version"], capture_output=True, text=True, timeout=60).stdout
     print(version)
     assert "decoder: rust" in version, "the Rust decoder is not inside the executable"

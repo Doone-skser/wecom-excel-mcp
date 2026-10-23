@@ -20,6 +20,7 @@ jobs:
           - { runner: ubuntu-latest, arch: x86_64 }
           - { runner: ubuntu-24.04-arm, arch: arm64 }
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - name: build in manylinux_2_28 (glibc 2.28)
@@ -40,6 +41,7 @@ jobs:
           - { runner: macos-14, name: macos-arm64 }
           - { runner: windows-latest, name: windows-x86_64.exe }
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
     defaults:
       run: { shell: bash }
     steps:
@@ -66,6 +68,7 @@ jobs:
           - { runner: macos-14, target: universal2-apple-darwin, manylinux: "" }
           - { runner: windows-latest, target: x64, manylinux: "" }
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
