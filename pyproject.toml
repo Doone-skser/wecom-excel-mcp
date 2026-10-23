@@ -1,6 +1,6 @@
 [project]
 name = "wecom-excel-mcp"
-version = "0.1.0"
+version = "0.2.0"
 description = "MCP server that reads WeCom (企业微信) online spreadsheets"
 authors = [
     { name = "Doone_M3", email = "64115840+Doone-skser@users.noreply.github.com" }
@@ -9,7 +9,7 @@ readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.11"
 dependencies = [
-    "httpx>=0.28.1",
+    "httpx[socks]>=0.28.1",
     "mcp>=2.3,<3",
     "pillow>=11",
 ]

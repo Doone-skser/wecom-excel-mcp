@@ -9,7 +9,7 @@
 ```
 你的电脑                                      你的服务器（本仓库）                    企业微信
 ┌──────────────────────────────┐   HTTPS    ┌──────────────────────────────┐        ┌───────────────────┐
-│ AI 助手                       │ ─────────▶ │ nginx → wecom-excel-mcp      │ ─────▶ │ doc.weixin.qq.com │
+│ AI 助手                       │ ─────────▶ │ wecom-excel-mcp serve        │ ─────▶ │ doc.weixin.qq.com │
 │  └ wecom-mcp.py（本地 MCP）    │ 带上 cookie │  解码表格，只在请求期间用 cookie │        └───────────────────┘
 │     扫码 / 桌面端登录，cookie 存本机 │            │  不保存、不记录任何人的 cookie   │
 └──────────────────────────────┘            └──────────────────────────────┘
@@ -20,30 +20,30 @@
 - **说明页**：服务器首页是一个安装说明页，同时给人看、也给 AI 看。用户把链接发给自己的 AI 助手，AI 就会照着装好。
 - **后台**：`/admin` 有使用统计，包括调用量、用户、文档、报错，可以给用户写备注。需要账号密码登录。
 
-## 部署一份自己的（推荐交给 AI）
+## 部署一份自己的
 
-你需要：
+GitHub Actions 会为 Linux、macOS、Windows 自动打包好单文件程序，在 [Releases](https://github.com/Doone-skser/wecom-excel-mcp/releases) 里，不需要装 Python 或 Rust。
 
-1. 一台 Debian 12 或 Ubuntu 22.04/24.04 的 Linux 服务器，有 root 权限；
-2. 一个域名，A 记录已经指向这台服务器，并且 80、443 端口已开放（云服务器记得放行安全组）。
-
-把下面这段发给你的 AI 助手（例如在服务器上运行的 Claude Code），把域名换成你自己的：
-
-> 帮我部署 https://github.com/Doone-skser/wecom-excel-mcp ：在这台服务器上 clone 下来，按仓库里 DEPLOY.md 的步骤部署，域名用 `wecom.你的域名.com`，后台账号用 `admin`。部署完把说明页地址和后台地址告诉我。
-
-也可以自己手动部署，一条命令就行：
+**Linux 服务器，一条命令：**
 
 ```bash
-git clone https://github.com/Doone-skser/wecom-excel-mcp.git && cd wecom-excel-mcp
-sudo DOMAIN=wecom.example.com EMAIL=you@example.com ADMIN_USER=admin ./deploy/install.sh
+curl -fsSL https://raw.githubusercontent.com/Doone-skser/wecom-excel-mcp/main/deploy/install.sh | sudo bash
 ```
 
-脚本会装好依赖、编译、配置 systemd、nginx 和 Let's Encrypt 证书，最后会让你设置后台密码。完成后：
+装完服务就运行在 `http://服务器IP:8765/`，并注册成 systemd 服务，开机自启。脚本最后会打印后台密码。有域名、想用 HTTPS 的话，加上 `DOMAIN=你的域名`，脚本会自动配置 nginx 和证书。
 
-- `https://你的域名/`：安装说明页。发给同事，或者发给同事的 AI 助手。
-- `https://你的域名/admin`：使用统计后台。
+**macOS / Windows / 任意电脑：** 下载对应的文件，运行 `wecom-excel-mcp serve`。
 
-更新时运行 `git pull`，再执行一次同样的命令。详细说明、宝塔面板等已有 nginx 的情况，以及常见问题，见 [DEPLOY.md](DEPLOY.md)。
+**交给 AI：** 把这段话发给服务器上的 AI 助手（例如 Claude Code）：
+
+> 帮我部署 https://github.com/Doone-skser/wecom-excel-mcp ，按仓库里 DEPLOY.md 的步骤来，用端口模式就行。部署完把说明页地址、后台地址和密码告诉我。
+
+部署完成后：
+
+- `http://服务器IP:8765/`：安装说明页。发给同事，或者发给同事的 AI 助手。
+- `http://服务器IP:8765/admin`：使用统计后台。
+
+更新时重新运行同样的命令即可。详细说明、宝塔面板的用法和常见问题见 [DEPLOY.md](DEPLOY.md)。
 
 ## 用户怎么用
 
@@ -74,7 +74,8 @@ claude mcp add -s user wecom-excel -- python3 ~/.config/wecom-excel/wecom-mcp.py
 - 缓存的键是 cookie 的 SHA-256，不是 cookie 本身。企业微信响应里返回的 Set-Cookie 会被丢弃。
 - 使用统计只记录时间、工具、耗时、结果、账号名、随机安装 ID、IP 和文档 ID/标题。不记录 cookie，也不记录表格内容。数据保留 180 天。
 - 后台密码只存 PBKDF2 哈希。同一个 IP 连续输错 5 次密码，锁定 15 分钟。
-- `/mcp` 每个 IP 每秒最多 10 个请求（允许瞬时 40 个）。
+- 直接开端口时，服务只认 TCP 连接的真实来源 IP，客户端自己填的 `X-Real-IP` 不算数。域名模式下由 nginx 转发真实 IP，并且 `/mcp` 每个 IP 每秒最多 10 个请求（允许瞬时 40 个）。
+- 端口模式是 http，cookie 会明文经过网络，适合内网使用；放到公网上建议用域名模式加 HTTPS。
 
 ## 开发
 

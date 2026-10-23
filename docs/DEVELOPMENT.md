@@ -10,12 +10,16 @@
 | `rust/src/lib.rs` | the same decoder in Rust (PyO3, built as `wecom_excel_mcp._native`) |
 | `src/wecom_excel_mcp/formatting.py`, `table.py`, `images.py` | output formats, A1 ranges, picture download and tiling |
 | `src/wecom_excel_mcp/usage.py`, `admin.py`, `admin*.html` | usage log (SQLite) and the `/admin` page |
-| `deploy/site/wecom-mcp.py` | the local client users install: login, cookie storage, forwarding, self-update (stdlib only) |
-| `deploy/site/index.html`, `llms.txt` | the setup page for people and AI assistants |
-| `deploy/install.sh`, `nginx.conf`, `wecom-excel-http.service` | server install, see [DEPLOY.md](../DEPLOY.md) |
+| `src/wecom_excel_mcp/site/wecom-mcp.py` | the local client users install: login, cookie storage, forwarding, self-update (stdlib only) |
+| `src/wecom_excel_mcp/site/index.html`, `llms.txt` | the setup page for people and AI assistants |
+| `src/wecom_excel_mcp/web.py` | serves those three files with the server's own address; which proxy headers to believe |
+| `deploy/install.sh` | Linux install (prebuilt executable, systemd, optional nginx + certificate), see [DEPLOY.md](../DEPLOY.md) |
+| `packaging/` | PyInstaller build of the standalone executable and its smoke test |
+| `.github/workflows/release.yml` | on a tag `v*`: executables for Linux / macOS / Windows, wheels, sdist, GitHub release |
 | `scripts/anonymize_fixture.py` | turns a captured payload into a test fixture with made-up text |
 
-Files under `deploy/` say `wecom.example.com`; `install.sh` replaces it with the real domain when it copies them.
+The files in `site/` say `https://wecom.example.com`; `web.py` replaces it with the server's address (`--public-url`,
+else the request's scheme and Host) on every response.
 
 ## Build and test
 
@@ -38,6 +42,15 @@ uvx --from 'maturin[zig]' maturin build --release --target x86_64-unknown-linux-
 
 New fixtures must not contain real sheet content: capture the base64 payload, then
 `python scripts/anonymize_fixture.py captured.b64 tests/fixtures/<name>.b64` and look at the result.
+
+## Standalone executable
+
+```bash
+uv pip install pyinstaller && packaging/build.sh && python packaging/smoke_test.py dist/wecom-excel-mcp
+```
+
+The Linux release build runs in a `manylinux_2_28` container (`packaging/build-linux.sh`) so it runs on glibc 2.28+.
+`wecom-excel-mcp --version` says whether the Rust decoder is inside.
 
 ## Running the server other ways
 
@@ -64,7 +77,7 @@ lives only for one request: it is not stored, cached or logged (caches are keyed
 WeCom sets in responses are dropped). HTTP runs stateless. `--allowed-hosts` lists the Host names accepted
 behind the proxy.
 
-## The local client (`deploy/site/wecom-mcp.py`)
+## The local client (`site/wecom-mcp.py`)
 
 One file, standard library only. It adds a `login` tool and forwards the sheet tools with the cookie from
 `~/.config/wecom-excel/cookie` (mode 600), plus `X-Wecom-User` (account name) and `X-Wecom-Client-Id` (a random

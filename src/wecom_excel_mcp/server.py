@@ -26,6 +26,7 @@ from .formatting import images_in, render_html
 from .images import Tile, tile_image
 from .table import Range, build_grid, col_letter, parse_range, render
 from .usage import UsageLog
+from .web import client_ip
 
 _client: WecomClient | None = None
 # Whether the server's own cookies (WECOM_COOKIE / WECOM_COOKIE_API) may be used; off for a shared HTTP
@@ -132,7 +133,8 @@ def _record(name: str, kwargs: dict, error: str | None, start: float) -> None:
     _usage.record(
         tool=name, ok=error is None, error=error, ms=int((time.monotonic() - start) * 1000),
         user=urllib.parse.unquote(headers.get(USER_HEADER, ""))[:100] or None,
-        ip=headers.get("x-real-ip"), client=(headers.get("user-agent") or "")[:100] or None,
+        ip=client_ip(request) if (request := getattr(getattr(ctx, "request_context", None), "request", None)) else None,
+        client=(headers.get("user-agent") or "")[:100] or None,
         pad_id=pad_id, title=title,
         client_id=cid if _CLIENT_ID.fullmatch(cid := headers.get(CLIENT_ID_HEADER, "")) else None,
     )
@@ -468,9 +470,119 @@ async def get_images(
     return [head, *await _pictures(data, rng, max_images, tile)]
 
 
-def main() -> None:
+def _data_dir() -> str:
+    if os.name == "nt":
+        base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
+    else:
+        base = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
+    return os.path.join(base, "wecom-excel")
+
+
+def _write_admin(path: str, user: str, password: str) -> None:
+    from .admin import hash_password
+
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    fd = os.open(path + ".tmp", os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(f"{user}:{hash_password(password)}\n")
+    os.replace(path + ".tmp", path)
+
+
+def _local_address() -> str:
+    """This machine's address on its outgoing interface (nothing is sent), for the startup message."""
+    import socket
+
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("192.0.2.1", 9))
+            return s.getsockname()[0]
+    except OSError:
+        return "127.0.0.1"
+
+
+def _run_http(host: str, port: int, *, caller_cookies_only: bool, usage_db: str = "", admin_password_file: str = "",
+              allowed_hosts: list[str] | None = None, site: bool = False, public_url: str = "") -> None:
     global _use_env_cookies, _usage
-    p = argparse.ArgumentParser(description="WeCom online-sheet MCP server")
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    _use_env_cookies = not caller_cookies_only
+    if usage_db:
+        from .admin import Admin, add_routes
+
+        _usage = UsageLog(usage_db)
+        state = os.path.dirname(os.path.abspath(usage_db))
+        add_routes(mcp, Admin(_usage, admin_password_file or os.path.join(state, "admin-password"), state))
+    if site:
+        from . import web
+
+        web.add_routes(mcp, public_url)
+    if allowed_hosts is None:  # a public server: any Host (DNS-rebinding checks protect servers on localhost)
+        security = TransportSecuritySettings(enable_dns_rebinding_protection=False)
+    else:
+        security = TransportSecuritySettings(allowed_hosts=["127.0.0.1:*", "localhost:*", "[::1]:*", *allowed_hosts])
+    # Stateless: every request stands alone (and carries its own cookie), so restarts drop no sessions.
+    mcp.run("streamable-http", host=host, port=port, stateless_http=True, transport_security=security)
+
+
+def serve(argv: list[str]) -> None:
+    """`wecom-excel-mcp serve`: the shared server in one command, with its setup page and /admin."""
+    p = argparse.ArgumentParser(prog="wecom-excel-mcp serve", description="run the shared server: setup page at /, "
+                                "MCP at /mcp, usage statistics at /admin; each caller's own cookie, none stored")
+    p.add_argument("--host", default=os.environ.get("MCP_HOST", "0.0.0.0"), help="default 0.0.0.0 (every interface)")
+    p.add_argument("--port", type=int, default=int(os.environ.get("MCP_PORT", "8765")))
+    p.add_argument("--data-dir", default=os.environ.get("WECOM_DATA_DIR") or _data_dir(),
+                   help=f"usage statistics and the /admin login (default {_data_dir()})")
+    p.add_argument("--public-url", default=os.environ.get("WECOM_PUBLIC_URL", ""),
+                   help="the address users reach, e.g. https://wecom.example.com (default: taken from each request)")
+    p.add_argument("--no-stats", action="store_true", help="record nothing and serve no /admin")
+    args = p.parse_args(argv)
+    usage_db = "" if args.no_stats else os.path.join(args.data_dir, "usage.db")
+    shown = args.public_url.rstrip("/") or f"http://{_local_address() if args.host in ('0.0.0.0', '::') else args.host}:{args.port}"
+    print(f"wecom-excel: 说明页 {shown}/   MCP {shown}/mcp", file=sys.stderr)
+    if usage_db:
+        pw_file = os.path.join(args.data_dir, "admin-password")
+        if not os.path.exists(pw_file):
+            import secrets
+
+            password = secrets.token_urlsafe(12)
+            _write_admin(pw_file, "admin", password)
+            print(f"wecom-excel: 后台 {shown}/admin   账号 admin   密码 {password}\n"
+                  f"             （只显示这一次；改密码：wecom-excel-mcp passwd）", file=sys.stderr)
+        else:
+            print(f"wecom-excel: 后台 {shown}/admin", file=sys.stderr)
+    if not args.public_url.startswith("https://"):
+        print("wecom-excel: 注意：没有 HTTPS 时 cookie 会明文经过网络，只在内网或可信网络里这样用", file=sys.stderr)
+    _run_http(args.host, args.port, caller_cookies_only=True, usage_db=usage_db, site=True, public_url=args.public_url)
+
+
+def passwd(argv: list[str]) -> None:
+    """`wecom-excel-mcp passwd`: set the /admin account and password."""
+    import getpass
+
+    p = argparse.ArgumentParser(prog="wecom-excel-mcp passwd", description="set the /admin account and password")
+    p.add_argument("--user", default="admin")
+    p.add_argument("--data-dir", default=os.environ.get("WECOM_DATA_DIR") or _data_dir())
+    p.add_argument("--file", default="", help="the credentials file (default: admin-password in --data-dir)")
+    args = p.parse_args(argv)
+    if sys.stdin.isatty():
+        password = getpass.getpass("新密码: ")
+        if getpass.getpass("再输一次: ") != password:
+            sys.exit("两次输入不一样")
+    else:
+        password = sys.stdin.readline().rstrip("\n")
+    if not password:
+        sys.exit("密码不能为空")
+    path = args.file or os.path.join(args.data_dir, "admin-password")
+    _write_admin(path, args.user, password)
+    print(f"已保存到 {path}（账号 {args.user}）。已登录的后台会话都已失效。")
+
+
+def main() -> None:
+    if sys.argv[1:2] == ["serve"]:
+        return serve(sys.argv[2:])
+    if sys.argv[1:2] == ["passwd"]:
+        return passwd(sys.argv[2:])
+    p = argparse.ArgumentParser(description="WeCom online-sheet MCP server (`serve` runs the shared server in one "
+                                "command; `passwd` sets its /admin password)")
     p.add_argument("--transport", choices=["stdio", "streamable-http"], default=os.environ.get("MCP_TRANSPORT", "stdio"))
     p.add_argument("--host", default=os.environ.get("MCP_HOST", "127.0.0.1"))
     p.add_argument("--port", type=int, default=int(os.environ.get("MCP_PORT", "8765")))
@@ -497,8 +609,18 @@ def main() -> None:
         help="the /admin credentials, one line `username:<hash from --hash-password>`; "
         "default: admin-password beside --usage-db",
     )
+    p.add_argument("--site", action="store_true", help="HTTP: also serve the setup page, llms.txt and wecom-mcp.py")
     p.add_argument("--hash-password", action="store_true", help="read a password and print its hash for /admin")
+    p.add_argument("--version", action="store_true", help="print the version and which decoder is in use")
     args = p.parse_args()
+    if args.version:
+        from importlib.metadata import version
+
+        from . import decoder
+
+        native = decoder._native is not None and decoder.USE_NATIVE
+        print(f"wecom-excel-mcp {version('wecom-excel-mcp')} (decoder: {'rust' if native else 'python'})")
+        return
     if args.hash_password:
         import getpass
 
@@ -507,21 +629,15 @@ def main() -> None:
         password = getpass.getpass("password: ") if sys.stdin.isatty() else sys.stdin.readline().rstrip("\n")
         print(hash_password(password))
         return
-    logging.getLogger("httpx").setLevel(logging.WARNING)
     if args.transport == "stdio":
+        logging.getLogger("httpx").setLevel(logging.WARNING)
         mcp.run("stdio")
         return
-    _use_env_cookies = not args.caller_cookies_only
-    if args.usage_db:
-        from .admin import Admin, add_routes
-
-        _usage = UsageLog(args.usage_db)
-        state = os.path.dirname(os.path.abspath(args.usage_db))
-        add_routes(mcp, Admin(_usage, args.admin_password_file or os.path.join(state, "admin-password"), state))
-    extra = [h.strip() for h in args.allowed_hosts.split(",") if h.strip()]
-    security = TransportSecuritySettings(allowed_hosts=["127.0.0.1:*", "localhost:*", "[::1]:*", *extra])
-    # Stateless: every request stands alone (and carries its own cookie), so restarts drop no sessions.
-    mcp.run("streamable-http", host=args.host, port=args.port, stateless_http=True, transport_security=security)
+    _run_http(
+        args.host, args.port, caller_cookies_only=args.caller_cookies_only, usage_db=args.usage_db,
+        admin_password_file=args.admin_password_file, site=args.site,
+        allowed_hosts=[h.strip() for h in args.allowed_hosts.split(",") if h.strip()],
+    )
 
 
 if __name__ == "__main__":

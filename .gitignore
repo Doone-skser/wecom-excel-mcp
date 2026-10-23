@@ -10,3 +10,4 @@ rust/target/
 *.xlsx
 *.b64.raw
 captured*.b64
+build/

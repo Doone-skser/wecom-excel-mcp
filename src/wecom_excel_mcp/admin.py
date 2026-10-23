@@ -23,6 +23,7 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 
 from .usage import MAX_LABEL, UsageLog
+from .web import client_ip, is_https
 
 COOKIE = "wecom_admin"
 SESSION_DAYS = 7
@@ -136,7 +137,7 @@ class Admin:
         return self._login()
 
     async def login(self, request: Request) -> Response:
-        ip = request.headers.get("x-real-ip") or (request.client.host if request.client else "?")
+        ip = client_ip(request)
         stored = self._stored()
         if not stored:
             return self._login("后台账号还没有设置", 503)
@@ -152,7 +153,7 @@ class Admin:
         response = RedirectResponse("/admin", status_code=303)
         response.set_cookie(
             COOKIE, self._token(), max_age=SESSION_DAYS * 86400, path="/admin", httponly=True, samesite="strict",
-            secure=request.headers.get("x-forwarded-proto", request.url.scheme) == "https",
+            secure=is_https(request),
         )
         return response
 

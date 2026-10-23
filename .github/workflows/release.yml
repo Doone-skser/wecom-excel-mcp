@@ -1,0 +1,96 @@
+# Prebuilt packages. A tag v* builds them and publishes a GitHub release; "Run workflow" only builds them.
+#   standalone executables (no Python or Rust needed): wecom-excel-mcp-<os>-<arch>[.exe]
+#   wheels (abi3, CPython >= 3.11) and the sdist
+name: release
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  linux:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: ubuntu-latest, arch: x86_64 }
+          - { runner: ubuntu-24.04-arm, arch: arm64 }
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: build in manylinux_2_28 (glibc 2.28)
+        run: |
+          image=quay.io/pypa/manylinux_2_28_$([ "${{ matrix.arch }}" = arm64 ] && echo aarch64 || echo x86_64)
+          docker run --rm -v "$PWD:/w" -w /w "$image" packaging/build-linux.sh wecom-excel-mcp-linux-${{ matrix.arch }}
+      - run: python3 packaging/smoke_test.py dist/wecom-excel-mcp-linux-${{ matrix.arch }}
+      - uses: actions/upload-artifact@v4
+        with: { name: bin-linux-${{ matrix.arch }}, path: dist/wecom-excel-mcp-* }
+
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: macos-14, name: macos-arm64 }
+          - { runner: macos-15-intel, name: macos-x86_64 }
+          - { runner: windows-latest, name: windows-x86_64.exe }
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run: { shell: bash }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - uses: dtolnay/rust-toolchain@stable
+      - run: pip install . pyinstaller
+      - run: packaging/build.sh "wecom-excel-mcp-${{ matrix.name }}" && ls dist
+      - run: python packaging/smoke_test.py "dist/wecom-excel-mcp-${{ matrix.name }}"
+      - uses: actions/upload-artifact@v4
+        with: { name: bin-${{ matrix.name }}, path: dist/wecom-excel-mcp-* }
+
+  wheels:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: ubuntu-latest, target: x86_64, manylinux: "2014" }
+          - { runner: ubuntu-latest, target: aarch64, manylinux: "2014" }
+          - { runner: macos-14, target: universal2-apple-darwin, manylinux: "" }
+          - { runner: windows-latest, target: x64, manylinux: "" }
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          manylinux: ${{ matrix.manylinux || 'auto' }}
+          args: --release --out dist
+      - uses: actions/upload-artifact@v4
+        with: { name: wheel-${{ matrix.runner }}-${{ matrix.target }}, path: dist/*.whl }
+
+  sdist:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: PyO3/maturin-action@v1
+        with: { command: sdist, args: --out dist }
+      - uses: actions/upload-artifact@v4
+        with: { name: sdist, path: dist/*.tar.gz }
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [linux, desktop, wheels, sdist]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { path: dist, merge-multiple: true }
+      - run: cd dist && sha256sum * > SHA256SUMS && ls -la
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true

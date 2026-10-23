@@ -1,5 +1,7 @@
 """A shared HTTP server reads each doc with the cookie its caller sends, and keeps none of them."""
 
+from types import SimpleNamespace
+
 import httpx
 import pytest
 
@@ -18,8 +20,11 @@ def no_proxy_env(monkeypatch):
 
 
 class FakeCtx:
-    def __init__(self, headers):
+    """A tool call's context: its HTTP headers, and the address it came from (nginx on this machine by default)."""
+
+    def __init__(self, headers, peer="127.0.0.1"):
         self.headers = headers
+        self.request_context = SimpleNamespace(request=SimpleNamespace(headers=headers, client=SimpleNamespace(host=peer)))
 
 
 def opendoc_client(seen: list[str | None], retcode_for: dict[str, int] | None = None) -> WecomClient:

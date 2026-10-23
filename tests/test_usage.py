@@ -108,6 +108,13 @@ async def test_a_call_is_recorded_without_the_cookie(recording):
     assert "u=alice" not in dump and "u=old" not in dump
 
 
+async def test_ip_header_is_believed_only_from_a_local_proxy(recording):
+    spoofed = headers("u=alice")  # says x-real-ip 10.0.0.1
+    await server.list_sheets(PAD, ctx=FakeCtx(spoofed, peer="203.0.113.5"))  # straight to the port
+    await server.list_sheets(PAD, ctx=FakeCtx(spoofed))  # through nginx on 127.0.0.1
+    assert [r["ip"] for r in reversed(recording.stats(1)["recent"])] == ["203.0.113.5", "10.0.0.1"]
+
+
 async def test_no_usage_log_records_nothing(monkeypatch):
     monkeypatch.setattr(server, "_usage", None)
     monkeypatch.setattr(server, "_client", opendoc_client([]))
