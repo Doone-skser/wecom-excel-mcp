@@ -1,0 +1,39 @@
+[project]
+name = "wecom-excel-mcp"
+version = "0.1.0"
+description = "MCP server that reads WeCom (企业微信) online spreadsheets"
+authors = [
+    { name = "Doone_M3", email = "64115840+Doone-skser@users.noreply.github.com" }
+]
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.11"
+dependencies = [
+    "httpx>=0.28.1",
+    "mcp>=2.3,<3",
+    "pillow>=11",
+]
+
+[project.scripts]
+wecom-excel-mcp = "wecom_excel_mcp.server:main"
+
+[build-system]
+requires = ["maturin>=1.9,<2"]
+build-backend = "maturin"
+
+[tool.maturin]
+# Rust decoder (rust/src/lib.rs) built as wecom_excel_mcp._native next to the Python sources.
+manifest-path = "rust/Cargo.toml"
+python-source = "src"
+module-name = "wecom_excel_mcp._native"
+features = ["pyo3/extension-module"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

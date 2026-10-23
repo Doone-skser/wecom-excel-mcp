@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>登录 · wecom-excel 后台</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='15' fill='%2307c160'/%3E%3Crect x='12' y='13' width='36' height='35' rx='5' fill='%23fff'/%3E%3Cpath d='M12 18a5 5 0 0 1 5-5h26a5 5 0 0 1 5 5v4H12z' fill='%23bdf0d5'/%3E%3Ccircle cx='47' cy='47' r='11' fill='%2314161b' stroke='%23fff' stroke-width='3'/%3E%3C/svg%3E">
+<script>
+(function () {
+  var m = matchMedia("(prefers-color-scheme: dark)");
+  var set = function () { document.documentElement.dataset.theme = m.matches ? "dark" : "light"; };
+  set(); m.addEventListener("change", set);
+})();
+</script>
+<link href="https://cdn.jsdelivr.net/npm/daisyui@5.7.45" rel="stylesheet" type="text/css">
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.0"></script>
+<style>
+/* brand green as daisyUI's primary */
+:root[data-theme] { --color-primary: #07c160; --color-primary-content: #ffffff; }
+:root[data-theme="dark"] { --color-primary: #1fd27a; --color-primary-content: #062b16; }
+</style>
+</head>
+<body class="bg-base-200 min-h-screen grid place-items-center p-4">
+<main class="w-full max-w-sm">
+  <div class="flex flex-col items-center gap-3 mb-6">
+    <svg class="w-14 h-14" viewBox="0 0 64 64" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2ad883"/><stop offset="1" stop-color="#05a854"/></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#lg)"/><rect x="12" y="13" width="36" height="35" rx="5" fill="#fff"/><path d="M12 18a5 5 0 0 1 5-5h26a5 5 0 0 1 5 5v4H12z" fill="#bdf0d5"/><path d="M24 13v35M36 13v35M12 30.5h36M12 39h36" stroke="#07c160" stroke-opacity=".35" stroke-width="1.6"/><circle cx="47" cy="47" r="11" fill="#14161b" stroke="#fff" stroke-width="3"/><path d="M47 40.5c.7 4 2.5 5.8 6.5 6.5-4 .7-5.8 2.5-6.5 6.5-.7-4-2.5-5.8-6.5-6.5 4-.7 5.8-2.5 6.5-6.5z" fill="#2ad883"/></svg>
+    <div class="text-center">
+      <h1 class="text-xl font-semibold">wecom-excel 后台</h1>
+      <p class="text-sm opacity-60 mt-1">使用统计</p>
+    </div>
+  </div>
+  <form method="post" action="/admin/login" class="card bg-base-100 shadow-sm">
+    <div class="card-body gap-4">
+      <div role="alert" class="alert alert-error alert-soft text-sm py-2 {{error_hidden}}">{{error}}</div>
+      <label class="floating-label">
+        <span>账号</span>
+        <input type="text" name="username" class="input w-full" placeholder="账号" autocomplete="username" autocapitalize="off" spellcheck="false" required autofocus>
+      </label>
+      <label class="floating-label">
+        <span>密码</span>
+        <input type="password" name="password" class="input w-full" placeholder="密码" autocomplete="current-password" required>
+      </label>
+      <button type="submit" class="btn btn-primary w-full">登录</button>
+    </div>
+  </form>
+  <p class="text-xs opacity-50 text-center mt-4">登录后 7 天内免登录</p>
+</main>
+</body>
+</html>

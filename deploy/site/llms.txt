@@ -1,0 +1,58 @@
+# wecom-excel MCP
+
+读取企业微信在线表格（doc.weixin.qq.com/sheet/...）的只读 MCP 服务。
+
+用户本机运行一个小的本地 MCP（单文件 Python，只用标准库），它负责登录、把 cookie 保存在本机，并把读表请求带上 cookie 转发到 `https://wecom.example.com/mcp`。服务器不保存 cookie，每人只能读到自己有权限的表。
+
+## 安装步骤（给 AI 助手）
+
+### 1. 安装并注册（Claude Code）
+
+```bash
+mkdir -p ~/.config/wecom-excel && curl -fsSL https://wecom.example.com/wecom-mcp.py -o ~/.config/wecom-excel/wecom-mcp.py
+claude mcp remove wecom-excel -s user 2>/dev/null
+claude mcp add -s user wecom-excel -- python3 ~/.config/wecom-excel/wecom-mcp.py
+```
+
+Windows（PowerShell；Python 命令是 `python`，没有 `python3`）：
+
+```powershell
+New-Item -ItemType Directory -Force "$HOME\.config\wecom-excel" | Out-Null
+Invoke-WebRequest https://wecom.example.com/wecom-mcp.py -OutFile "$HOME\.config\wecom-excel\wecom-mcp.py"
+claude mcp remove wecom-excel -s user
+claude mcp add -s user wecom-excel -- python "$HOME\.config\wecom-excel\wecom-mcp.py"
+```
+
+其他客户端（Cursor 等）：添加 stdio MCP，命令 `python3`，参数为脚本的绝对路径（如 `/Users/<用户名>/.config/wecom-excel/wecom-mcp.py`）。
+
+### 2. 重启客户端后登录
+
+调用 `login` 工具（先不带参数）：
+
+- 本机企业微信桌面端已登录时，它返回账号（公司 / 姓名）。**询问用户**：直接用这个账号登录，还是扫码登录；然后以 `method="desktop"` 或 `method="qr"` 再调用。
+- 本机没有登录企业微信时，它直接弹出二维码窗口，等用户用企业微信扫码确认，登录完成后窗口自动关闭。
+
+cookie 保存在 `~/.config/wecom-excel/cookie`（权限 600）。不要读取或显示它的内容，也不要让用户把 cookie 发到对话里。
+
+终端登录也可以：`python3 ~/.config/wecom-excel/wecom-mcp.py login`（`--qr` 直接扫码），二维码直接打印在终端里。
+
+没有图形界面的机器（VPS、SSH 登录）上，`login` 的扫码方式会立即返回文字二维码，并在后台等待扫码：提醒用户按 ctrl+o 展开工具输出去扫，不要自己重画二维码；扫完后再调用一次 `login` 确认结果。
+
+## 工具
+
+- `login(method?)`：登录，见上
+- `list_sheets(doc)`：标题、tab 列表和数据范围，先调用它
+- `read_sheet(doc, sheet?, range?, content?, format?)`：读取数据；`range` 如 `A1:F100`；`content` 为 `text` / `text_images` / `full`
+- `search_sheet(doc, query, sheet?)`：搜索文字，返回单元格地址
+- `get_images(doc, sheet?, range?)`：单元格里的图片
+
+`doc` 可以是表格链接或 `e3_...` 这样的 padId。
+
+## 常见错误
+
+- `还没有登录` / `cookie 已失效`：调用 `login`
+- `retcode=200063`：这个账号没有该表格的权限
+
+## 不用本地 MCP
+
+也可以直接连远程服务：`https://wecom.example.com/mcp`（Streamable HTTP），每个请求在 `X-Wecom-Cookie` 头里带上 doc.weixin.qq.com 的 cookie。

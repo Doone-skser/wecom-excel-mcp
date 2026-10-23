@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>wecom-excel MCP</title>
+<meta name="description" content="读取企业微信在线表格的 MCP 服务。AI 助手请读 /llms.txt 按步骤安装。">
+<link rel="alternate" type="text/markdown" href="/llms.txt">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%232ad883'/%3E%3Cstop offset='1' stop-color='%2305a854'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='15' fill='url(%23g)'/%3E%3Crect x='12' y='13' width='36' height='35' rx='5' fill='%23fff'/%3E%3Cpath d='M12 18a5 5 0 0 1 5-5h26a5 5 0 0 1 5 5v4H12z' fill='%23bdf0d5'/%3E%3Cpath d='M24 13v35M36 13v35M12 30.5h36M12 39h36' stroke='%2307c160' stroke-opacity='.35' stroke-width='1.6'/%3E%3Ccircle cx='47' cy='47' r='11' fill='%2314161b' stroke='%23fff' stroke-width='3'/%3E%3Cpath d='M47 40.5c.7 4 2.5 5.8 6.5 6.5-4 .7-5.8 2.5-6.5 6.5-.7-4-2.5-5.8-6.5-6.5 4-.7 5.8-2.5 6.5-6.5z' fill='%232ad883'/%3E%3C/svg%3E">
+<style>
+:root {
+  --bg: #f6f7f9; --card: #fff; --fg: #16181d; --muted: #6b7280; --line: #e5e7eb;
+  --code-bg: #0f1115; --code-fg: #e6e8ee; --accent: #07c160; --accent-ink: #fff; --chip: #eef1f4;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0b0c0f; --card: #14161b; --fg: #eceef2; --muted: #9aa1ad; --line: #262a32;
+    --code-bg: #08090b; --code-fg: #e6e8ee; --accent: #1fd27a; --accent-ink: #062b16; --chip: #1c1f26;
+  }
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+}
+main { max-width: 760px; margin: 0 auto; padding: 56px 16px 72px; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+
+.brand { display: flex; align-items: center; gap: 14px; }
+.logo { width: 46px; height: 46px; flex: none; filter: drop-shadow(0 2px 6px rgba(7, 193, 96, .25)); }
+.hero h1 { margin: 0; font-size: 30px; letter-spacing: -.02em; }
+.hero h1 span { color: var(--accent); }
+.hero p { margin: 8px 0 24px; color: var(--muted); font-size: 16px; }
+
+.endpoint {
+  display: flex; align-items: center; gap: 10px; padding: 10px 10px 10px 16px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+}
+.endpoint code { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; font-size: 14px; }
+.ask {
+  margin-top: 12px; padding: 14px 16px 16px; border-radius: 12px; background: var(--card);
+  border: 1px solid var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.ask-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 14px; }
+.ask-head b { color: var(--accent); }
+.ask p {
+  margin: 10px 0 0; padding: 12px 14px; border-radius: 10px; background: var(--chip); font-size: 14.5px; line-height: 1.7;
+}
+button.copy.primary {
+  padding: 7px 14px; font-size: 13px; font-weight: 600; border-color: var(--accent);
+  background: var(--accent); color: var(--accent-ink);
+}
+button.copy.primary:hover { filter: brightness(1.06); }
+
+h2 { margin: 48px 0 16px; font-size: 13px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+
+.steps { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; counter-reset: step; }
+.step {
+  position: relative; padding: 18px 18px 18px 58px; background: var(--card);
+  border: 1px solid var(--line); border-radius: 14px;
+}
+.step::before {
+  counter-increment: step; content: counter(step); position: absolute; left: 18px; top: 18px;
+  width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--accent); color: var(--accent-ink); font-weight: 700; font-size: 13px;
+}
+.step h3 { margin: 1px 0 4px; font-size: 16px; }
+.step p { margin: 0 0 12px; color: var(--muted); font-size: 14px; }
+.step p:last-child { margin-bottom: 0; }
+.step p code { font-size: 12.5px; padding: 1px 5px; border-radius: 5px; background: var(--chip); color: var(--fg); }
+
+.code { min-width: 0; background: var(--code-bg); border-radius: 10px; overflow: hidden; }
+.code pre, .endpoint code { scrollbar-width: thin; scrollbar-color: #3a3f4a transparent; }
+.endpoint code { scrollbar-color: var(--line) transparent; }
+.code pre::-webkit-scrollbar, .endpoint code::-webkit-scrollbar { height: 6px; }
+.code pre::-webkit-scrollbar-track, .endpoint code::-webkit-scrollbar-track { background: transparent; }
+.code pre::-webkit-scrollbar-thumb { background: #3a3f4a; border-radius: 3px; }
+.endpoint code::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
+.code .bar {
+  display: flex; justify-content: space-between; align-items: center; padding: 6px 8px 6px 16px;
+  border-bottom: 1px solid #1f232b; color: #7d8590; font: 12px ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.code pre {
+  margin: 0; padding: 12px 16px 14px; color: var(--code-fg); overflow-x: auto; font-size: 13px; line-height: 1.55;
+}
+button.copy {
+  font: inherit; font-size: 12px; cursor: pointer; border: 1px solid var(--line); border-radius: 8px;
+  padding: 5px 10px; background: var(--card); color: var(--fg); white-space: nowrap;
+}
+.code button.copy { padding: 3px 9px; background: #1d2027; color: #cfd3dc; border-color: #2d313a; }
+button.copy:hover { border-color: var(--accent); }
+
+.tools { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.tool { padding: 14px 16px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; }
+.tool code { font-size: 13px; font-weight: 600; }
+.tool.wide { grid-column: 1 / -1; }
+.tool p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+
+.faq { background: var(--card); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.faq div { display: flex; gap: 16px; padding: 12px 16px; border-top: 1px solid var(--line); font-size: 14px; }
+.faq div:first-child { border-top: 0; }
+.faq > div > code { flex: 0 0 160px; font-size: 12.5px; color: var(--fg); }
+.faq span { color: var(--muted); }
+
+footer { margin-top: 48px; color: var(--muted); font-size: 13px; }
+footer a { color: inherit; }
+
+@media (max-width: 600px) {
+  main { padding-top: 36px; }
+  .hero h1 { font-size: 25px; }
+  .logo { width: 40px; height: 40px; }
+  .ask-head { flex-direction: column; align-items: stretch; }
+  .tools { grid-template-columns: 1fr; }
+  .faq div { flex-direction: column; gap: 2px; }
+  .faq > div > code { flex: none; }
+  .step { padding: 16px; }
+  .step::before { position: static; display: inline-grid; margin-bottom: 8px; }
+}
+</style>
+</head>
+<body>
+<main>
+
+<section class="hero">
+  <div class="brand"><svg class="logo" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2ad883"/><stop offset="1" stop-color="#05a854"/></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#lg)"/><rect x="12" y="13" width="36" height="35" rx="5" fill="#fff"/><path d="M12 18a5 5 0 0 1 5-5h26a5 5 0 0 1 5 5v4H12z" fill="#bdf0d5"/><path d="M24 13v35M36 13v35M12 30.5h36M12 39h36" stroke="#07c160" stroke-opacity=".35" stroke-width="1.6"/><circle cx="47" cy="47" r="11" fill="#14161b" stroke="#fff" stroke-width="3"/><path d="M47 40.5c.7 4 2.5 5.8 6.5 6.5-4 .7-5.8 2.5-6.5 6.5-.7-4-2.5-5.8-6.5-6.5 4-.7 5.8-2.5 6.5-6.5z" fill="#2ad883"/></svg><h1>wecom-excel <span>MCP</span></h1></div>
+  <p>让 AI 直接读取企业微信在线表格。用你自己的账号登录，服务器不保存 cookie。</p>
+  <div class="endpoint">
+    <code id="url">https://wecom.example.com/mcp</code>
+    <button class="copy" data-target="url">复制</button>
+  </div>
+  <div class="ask">
+    <div class="ask-head">
+      <span><b>最快的装法：</b>复制下面这段话，发给你的 AI（Claude Code、Cursor 等），它会自己装好</span>
+      <button class="copy primary" data-target="prompt">一键复制</button>
+    </div>
+    <p id="prompt">帮我装一下“企业微信表格读取工具”：打开 https://wecom.example.com/llms.txt ，按里面的步骤一步步装好。装完告诉我要不要重启，重启后帮我登录企业微信。以后我发企业微信表格链接给你，你就直接帮我读。</p>
+  </div>
+</section>
+
+<h2>手动安装</h2>
+<div class="steps">
+  <div class="step">
+    <h3>安装</h3>
+    <p>下载本地 MCP（单文件 Python，无需依赖）并注册到 Claude Code。</p>
+    <div class="code"><div class="bar"><span>terminal</span><button class="copy" data-target="c1">复制</button></div><pre id="c1">mkdir -p ~/.config/wecom-excel && curl -fsSL https://wecom.example.com/wecom-mcp.py -o ~/.config/wecom-excel/wecom-mcp.py
+claude mcp remove wecom-excel -s user 2>/dev/null
+claude mcp add -s user wecom-excel -- python3 ~/.config/wecom-excel/wecom-mcp.py</pre></div>
+  </div>
+  <div class="step">
+    <h3>登录</h3>
+    <p>重启 Claude Code，说“登录企业微信”。检测到本机企业微信已登录时可一键登录，也可以扫码。</p>
+  </div>
+  <div class="step">
+    <h3>开始使用</h3>
+    <p>把表格链接发给 AI 即可。cookie 只保存在本机，过期时 AI 会提示重新登录。</p>
+  </div>
+</div>
+
+<h2>工具</h2>
+<div class="tools">
+  <div class="tool wide"><code>login</code><p>检测到本机企业微信已登录时一键登录，或扫码登录</p></div>
+  <div class="tool"><code>list_sheets</code><p>标题、tab 列表和数据范围</p></div>
+  <div class="tool"><code>read_sheet</code><p>按范围读取，可带图片或完整格式</p></div>
+  <div class="tool"><code>search_sheet</code><p>搜索文字，返回单元格地址</p></div>
+  <div class="tool"><code>get_images</code><p>单元格里的原图</p></div>
+</div>
+
+<h2>常见问题</h2>
+<div class="faq">
+  <div><code>cookie 已失效</code><span>让 AI 重新登录即可</span></div>
+  <div><code>retcode=200063</code><span>这个账号没有该表格的权限</span></div>
+  <div><code>其他客户端</code><span>Cursor 等：添加 stdio MCP，命令 <code>python3</code>，参数为脚本的绝对路径</span></div>
+</div>
+
+<footer>只读访问 · cookie 仅用于当次请求，不存储、不记录 · 服务器会记录调用统计（账号名、表格名、次数和耗时），不含表格内容</footer>
+
+</main>
+<script>
+document.querySelectorAll("button.copy").forEach(function (b) {
+  b.addEventListener("click", function () {
+    var text = document.getElementById(b.dataset.target).textContent;
+    var label = b.dataset.label || (b.dataset.label = b.textContent);
+    var done = function () { b.textContent = "已复制"; setTimeout(function () { b.textContent = label; }, 1500); };
+    if (navigator.clipboard) navigator.clipboard.writeText(text).then(done);
+    else { var t = document.createElement("textarea"); t.value = text; document.body.appendChild(t); t.select(); document.execCommand("copy"); t.remove(); done(); }
+  });
+});
+</script>
+</body>
+</html>
