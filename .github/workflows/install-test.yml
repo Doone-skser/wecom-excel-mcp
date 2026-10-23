@@ -1,13 +1,16 @@
 # Installs the published release the way DEPLOY.md says, on real systemd hosts, and runs the executable on the
-# oldest systems it claims to support. Runs after each release, or by hand.
+# oldest systems it claims to support. Runs after each tagged release build, or by hand.
 name: install-test
 on:
-  release:
-    types: [published]
+  # after the release workflow (a release it publishes itself would not start this one)
+  workflow_run:
+    workflows: [release]
+    types: [completed]
   workflow_dispatch:
 
 jobs:
   install:
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && startsWith(github.event.workflow_run.head_branch, 'v'))
     strategy:
       fail-fast: false
       matrix:
@@ -48,6 +51,7 @@ jobs:
         run: sudo journalctl -u wecom-excel-http -n 50 --no-pager
 
   old-systems:
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && startsWith(github.event.workflow_run.head_branch, 'v'))
     strategy:
       fail-fast: false
       matrix:
