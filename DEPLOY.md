@@ -65,7 +65,7 @@ curl -fsSL .../deploy/install.sh | sudo DOMAIN=wecom.example.com SKIP_NGINX=1 ba
 | 系统 | 文件 |
 |---|---|
 | Linux x86_64 / arm64 | `wecom-excel-mcp-linux-x86_64` / `wecom-excel-mcp-linux-arm64` |
-| macOS Apple 芯片 / Intel | `wecom-excel-mcp-macos-arm64` / `wecom-excel-mcp-macos-x86_64` |
+| macOS（Apple 芯片） | `wecom-excel-mcp-macos-arm64` |
 | Windows | `wecom-excel-mcp-windows-x86_64.exe` |
 
 ```bash
@@ -88,7 +88,7 @@ Invoke-WebRequest https://github.com/Doone-skser/wecom-excel-mcp/releases/latest
 - 改后台密码：`wecom-excel-mcp passwd`（可以加 `--user 账号`）。
 - 这样运行关掉终端服务就停了。要常驻的话，用系统自带的方式托管：macOS 用 launchd，Windows 用「任务计划程序」或 NSSM。
 
-想用 Python 装的话，Releases 里也有 wheel 包：`pip install wecom_excel_mcp-*.whl`，然后运行 `wecom-excel-mcp serve`。
+Intel 芯片的 Mac 没有单文件程序，用下面的 wheel 包。想用 Python 装的话，Releases 里也有 wheel 包：`pip install wecom_excel_mcp-*.whl`，然后运行 `wecom-excel-mcp serve`。
 
 ## 验证
 

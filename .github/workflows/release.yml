@@ -1,5 +1,6 @@
 # Prebuilt packages. A tag v* builds them and publishes a GitHub release; "Run workflow" only builds them.
 #   standalone executables (no Python or Rust needed): wecom-excel-mcp-<os>-<arch>[.exe]
+#   (no Intel macOS executable: cryptography, which mcp needs, does not bundle there; use the wheel)
 #   wheels (abi3, CPython >= 3.11) and the sdist
 name: release
 on:
@@ -37,7 +38,6 @@ jobs:
       matrix:
         include:
           - { runner: macos-14, name: macos-arm64 }
-          - { runner: macos-15-intel, name: macos-x86_64 }
           - { runner: windows-latest, name: windows-x86_64.exe }
     runs-on: ${{ matrix.runner }}
     defaults:
