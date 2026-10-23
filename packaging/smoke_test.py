@@ -3,6 +3,8 @@
     python packaging/smoke_test.py dist/wecom-excel-mcp-linux-x86_64
 """
 
+from __future__ import annotations
+
 import json
 import os
 import subprocess

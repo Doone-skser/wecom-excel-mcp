@@ -1,0 +1,65 @@
+# Installs the published release the way DEPLOY.md says, on real systemd hosts, and runs the executable on the
+# oldest systems it claims to support. Runs after each release, or by hand.
+name: install-test
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  install:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-latest, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: first install (curl | sudo bash)
+        run: |
+          sudo bash deploy/install.sh | tee out1
+          systemctl is-active wecom-excel-http
+          echo "PW=$(sed -n 's/.*password: \([^ ]*\) .*/\1/p' out1)" >> "$GITHUB_ENV"
+      - name: check the running service
+        run: |
+          B=http://127.0.0.1:8765
+          curl -fsS -o /dev/null $B/
+          curl -fsS -H 'Host: 1.2.3.4:8765' $B/wecom-mcp.py | grep -F 'REMOTE = os.environ.get("WECOM_MCP_URL", "http://1.2.3.4:8765/mcp")'
+          test "$(curl -s -o /dev/null -w '%{http_code}' -d "username=admin&password=$PW" $B/admin/login)" = 303
+          test "$(curl -s -o /dev/null -w '%{http_code}' -d 'username=admin&password=nope' $B/admin/login)" = 401
+          curl -fsS $B/mcp -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+            -H 'X-Wecom-Cookie: x=1' \
+            -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"c","version":"1"}}}' \
+            | grep -F '"wecom-excel"'
+          sudo ls -la /var/lib/wecom-excel
+          test "$(sudo stat -c %U:%a /var/lib/wecom-excel/admin-password)" = wecom-excel:600
+          ps -o user=,args= -u wecom-excel | grep -F 'serve --host 0.0.0.0 --port 8765'
+      - name: update with a new password and another port
+        run: |
+          sudo ADMIN_PASSWORD=newpw PORT=9000 bash deploy/install.sh
+          test "$(curl -s -o /dev/null -w '%{http_code}' -d 'username=admin&password=newpw' http://127.0.0.1:9000/admin/login)" = 303
+          ! curl -fs -o /dev/null http://127.0.0.1:8765/
+      - name: a release that does not exist is refused
+        run: "! sudo VERSION=v9.9.9 bash deploy/install.sh"
+      - if: failure()
+        run: sudo journalctl -u wecom-excel-http -n 50 --no-pager
+
+  old-systems:
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ["debian:10", "rockylinux:8", "ubuntu:20.04"]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - run: curl -fsSL -o wecom-excel-mcp https://github.com/${{ github.repository }}/releases/latest/download/wecom-excel-mcp-linux-x86_64 && chmod +x wecom-excel-mcp
+      - name: run it in ${{ matrix.image }}
+        run: |
+          docker run --rm -v "$PWD:/w" -w /w ${{ matrix.image }} sh -c '
+            ldd --version | head -1
+            ./wecom-excel-mcp --version | grep "decoder: rust"
+            if command -v dnf >/dev/null; then dnf install -y -q python39 >/dev/null; py=python3.9
+            else apt-get update -qq && apt-get install -y -qq python3 >/dev/null; py=python3; fi
+            $py packaging/smoke_test.py ./wecom-excel-mcp'
