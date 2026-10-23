@@ -87,6 +87,39 @@ def test_too_many_failures(setup):
     assert blocked.status_code == 429 and "set-cookie" not in blocked.headers
 
 
+def test_many_ips_failing_together_stop_all_logins(setup, monkeypatch):
+    client, _ = setup
+    monkeypatch.setattr(admin_mod, "MAX_FAILURES_PER_MINUTE", 3)
+    for i in range(3):
+        client.post("/admin/login", data={"username": "boss", "password": "x"}, headers={"x-real-ip": f"10.0.0.{i}"})
+    blocked = client.post("/admin/login", data={"username": "boss", "password": "s3cret"}, headers={"x-real-ip": "10.9.9.9"})
+    assert blocked.status_code == 429
+
+
+def test_failure_records_drop_the_oldest_not_all(tmp_path, monkeypatch):
+    monkeypatch.setattr(admin_mod, "MAX_IPS", 3)
+    a = Admin(UsageLog(tmp_path / "u.db"), tmp_path / "pw", tmp_path)
+    for ip in ["a", "b", "c", "d"]:
+        a._fail(ip)
+    assert list(a.failures) == ["b", "c", "d"]
+
+
+def test_passwd_needs_a_long_password(tmp_path, monkeypatch, capsys):
+    import io
+    import sys
+
+    from wecom_excel_mcp import server
+
+    pw = tmp_path / "admin-password"
+    monkeypatch.setattr(sys, "stdin", io.StringIO("short\n"))
+    with pytest.raises(SystemExit):
+        server.passwd(["--file", str(pw)])
+    assert not pw.exists()
+    monkeypatch.setattr(sys, "stdin", io.StringIO("long enough pw\n"))
+    server.passwd(["--file", str(pw), "--user", "boss"])
+    assert pw.read_text().startswith("boss:pbkdf2_sha256$")
+
+
 def test_label(setup):
     client, _ = setup
     assert client.post("/admin/api/label", json={"key": "k", "label": "x"}).status_code == 401

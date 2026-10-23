@@ -92,7 +92,8 @@ UUID kept in `~/.config/wecom-excel/client-id`) for the usage statistics.
   `python3 wecom-mcp.py login` prints the QR code in a terminal.
 - When a cookie expires and the last login went through the desktop app, it logs in again through the app (only as
   the same account) and retries the call.
-- Self-update: on the first request each hour (and at start) it compares `VERSION` with the published copy; if
+- Self-update (only from an HTTPS server, or one on this machine: the new file is run as is): on the first
+  request each hour (and at start) it compares `VERSION` with the published copy; if
   that is newer it replaces its file and, once idle, `exec`s it in the same process (on Windows the new version
   starts with the next client start). **Bump `VERSION` with every change to this file.**
 - stdio is forced to UTF-8 (Windows defaults to the ANSI code page otherwise).

@@ -102,11 +102,14 @@ jobs:
     needs: [linux, desktop, wheels, sdist]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           path: dist
           merge-multiple: true
-      - run: cd dist && sha256sum * > SHA256SUMS && ls -la
+      # install.sh goes with the release, so it can be fetched from github.com (raw.githubusercontent.com is
+      # blocked in some networks) and matches the executables it installs
+      - run: cp deploy/install.sh dist/ && cd dist && sha256sum * > SHA256SUMS && ls -la
       - uses: softprops/action-gh-release@v2
         with:
           files: dist/*

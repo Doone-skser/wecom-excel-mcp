@@ -3,7 +3,8 @@
 The credentials file holds one line, `username:<PBKDF2 hash>` (`wecom-excel-mcp --hash-password` makes the
 hash). A login sets a signed session cookie (HttpOnly, SameSite=Strict, Path=/admin; Secure behind HTTPS) that
 lasts SESSION_DAYS; its signature covers that line, so changing the username or password ends every session. An IP with
-MAX_FAILURES wrong passwords within FAILURE_WINDOW is refused until the window passes.
+MAX_FAILURES wrong passwords within FAILURE_WINDOW is refused until the window passes, and past
+MAX_FAILURES_PER_MINUTE failures from all IPs together every login waits for the next minute.
 """
 
 from __future__ import annotations
@@ -29,6 +30,11 @@ COOKIE = "wecom_admin"
 SESSION_DAYS = 7
 MAX_FAILURES = 5
 FAILURE_WINDOW = 15 * 60
+# Across all IPs (an attacker can have many, e.g. an IPv6 range): past this many failures in a minute every
+# login waits for the next minute. The admin may be kept out meanwhile, but the password cannot be guessed.
+MAX_FAILURES_PER_MINUTE = 30
+MAX_IPS = 10_000  # failure records kept; the oldest go first
+MIN_PASSWORD = 12
 _ITERATIONS = 600_000
 
 
@@ -55,6 +61,9 @@ class Admin:
         self.password_file = Path(password_file)
         self.secret = self._secret(Path(state_dir) / "session.key")
         self.failures: dict[str, list[float]] = {}
+        self.recent_failures: list[float] = []  # every IP's, for MAX_FAILURES_PER_MINUTE
+        # Password hashes computed at once (each ~0.3 s of CPU): logins cannot take the threads sheets decode on.
+        self.hashing = asyncio.Semaphore(2)
         files = resources.files(__package__)
         self.dashboard = files.joinpath("admin.html").read_text(encoding="utf-8")
         self.login_page = files.joinpath("admin_login.html").read_text(encoding="utf-8")
@@ -106,6 +115,9 @@ class Admin:
 
     def _blocked(self, ip: str) -> bool:
         now = time.time()
+        self.recent_failures = [t for t in self.recent_failures if now - t < 60]
+        if len(self.recent_failures) >= MAX_FAILURES_PER_MINUTE:
+            return True
         recent = [t for t in self.failures.get(ip, []) if now - t < FAILURE_WINDOW]
         if recent:
             self.failures[ip] = recent
@@ -114,9 +126,11 @@ class Admin:
         return len(recent) >= MAX_FAILURES
 
     def _fail(self, ip: str) -> None:
-        self.failures.setdefault(ip, []).append(time.time())
-        if len(self.failures) > 10_000:  # bound the memory an attacker can make us use
-            self.failures.clear()
+        now = time.time()
+        self.failures[ip] = [*self.failures.pop(ip, []), now]  # re-inserted: the dict stays oldest first
+        self.recent_failures.append(now)
+        while len(self.failures) > MAX_IPS:  # bound the memory, never forgetting the latest
+            del self.failures[next(iter(self.failures))]
 
     # ------------------------------------------------------------------ pages
 
@@ -146,7 +160,9 @@ class Admin:
         form = urllib.parse.parse_qs((await request.body())[:4096].decode("utf-8", "replace"))
         username = (form.get("username") or [""])[0].strip()
         password = (form.get("password") or [""])[0]
-        if not await asyncio.to_thread(self._check, username, password, stored):
+        async with self.hashing:
+            ok = await asyncio.to_thread(self._check, username, password, stored)
+        if not ok:
             self._fail(ip)
             return self._login("账号或密码不对", 401)
         self.failures.pop(ip, None)

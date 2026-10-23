@@ -34,7 +34,7 @@ import webbrowser
 from http.cookiejar import CookieJar
 from pathlib import Path
 
-VERSION = "1.4.0"
+VERSION = "1.4.1"
 REMOTE = os.environ.get("WECOM_MCP_URL", "https://wecom.example.com/mcp")
 COOKIE_FILE = Path(os.environ.get("WECOM_COOKIE_FILE", Path.home() / ".config" / "wecom-excel" / "cookie"))
 QR_FILE = COOKIE_FILE.with_name("login-qr.txt")
@@ -747,12 +747,20 @@ UPDATE_EVERY = 3600  # seconds: the first request after this long checks for a n
 HOT_RESTART = os.name == "posix"  # exec() keeps the process (and the client's pipes) only on POSIX
 
 
+def _trusted_channel(url: str) -> bool:
+    """HTTPS, or this machine: where nobody on the network can swap the file for their own code."""
+    u = urllib.parse.urlparse(url)
+    return u.scheme == "https" or (u.scheme == "http" and u.hostname in ("127.0.0.1", "localhost", "::1"))
+
+
 def self_update() -> str | None:
     """Replace this file with a newer published version; returns that version, or None.
-    The new file comes from the same HTTPS site as the first download, and is checked to compile first."""
+    Only over HTTPS (see _trusted_channel): the new file is run as is. It is checked to compile first."""
     global update_note
     me = Path(sys.argv[0]).resolve()
     if os.environ.get("WECOM_MCP_NO_UPDATE") or not me.is_file() or me.suffix != ".py":
+        return None
+    if not _trusted_channel(UPDATE_URL):
         return None
     try:
         req = urllib.request.Request(UPDATE_URL, headers={"User-Agent": f"wecom-mcp.py/{VERSION}"})

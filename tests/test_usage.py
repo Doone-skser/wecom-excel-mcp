@@ -119,3 +119,28 @@ async def test_no_usage_log_records_nothing(monkeypatch):
     monkeypatch.setattr(server, "_usage", None)
     monkeypatch.setattr(server, "_client", opendoc_client([]))
     await server.list_sheets(PAD, ctx=FakeCtx(headers("u=alice")))
+
+
+async def test_a_call_without_a_cookie_is_not_recorded(recording):
+    with pytest.raises(Exception):
+        await server.list_sheets(PAD, ctx=FakeCtx({"user-agent": "x", "x-wecom-user": "fake"}))
+    assert recording.stats(1)["recent"] == []
+
+
+async def test_arguments_are_capped_and_callers_rate_limited(monkeypatch):
+    seen = []
+
+    @server._guarded
+    async def tool(doc: str, max_images: int = 5, max_rows: int = 500, ctx=None):
+        seen.append((max_images, max_rows))
+        return "ok"
+
+    monkeypatch.setattr(server, "_usage", None)
+    await tool("d", max_images=10**9, max_rows=-5)
+    assert seen == [(server.LIMITS["max_images"], 0)]
+    ctx = FakeCtx({"x-wecom-cookie": "u=a"}, peer="203.0.113.9")
+    for _ in range(int(server.BURST)):
+        await tool("d", ctx=ctx)
+    with pytest.raises(Exception, match="too many requests"):
+        await tool("d", ctx=ctx)
+    await tool("d", ctx=FakeCtx({"x-wecom-cookie": "u=b"}, peer="203.0.113.10"))  # another caller is not held up

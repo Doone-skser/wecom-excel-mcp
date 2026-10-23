@@ -37,9 +37,11 @@ jobs:
           ps -o user=,args= -u wecom-excel | grep -F 'serve --host 0.0.0.0 --port 8765'
       - name: update with a new password and another port
         run: |
-          sudo ADMIN_PASSWORD=newpw PORT=9000 bash deploy/install.sh
-          test "$(curl -s -o /dev/null -w '%{http_code}' -d 'username=admin&password=newpw' http://127.0.0.1:9000/admin/login)" = 303
+          sudo ADMIN_PASSWORD=new-password-123 PORT=9000 bash deploy/install.sh
+          test "$(curl -s -o /dev/null -w '%{http_code}' -d 'username=admin&password=new-password-123' http://127.0.0.1:9000/admin/login)" = 303
           ! curl -fs -o /dev/null http://127.0.0.1:8765/
+      - name: a short admin password is refused
+        run: "! sudo ADMIN_PASSWORD=short bash deploy/install.sh"
       - name: a release that does not exist is refused
         run: "! sudo VERSION=v9.9.9 bash deploy/install.sh"
       - if: failure()

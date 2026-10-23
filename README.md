@@ -27,7 +27,7 @@ GitHub Actions 会为 Linux、macOS、Windows 自动打包好单文件程序，�
 **Linux 服务器，一条命令：**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Doone-skser/wecom-excel-mcp/main/deploy/install.sh | sudo bash
+curl -fsSL https://github.com/Doone-skser/wecom-excel-mcp/releases/latest/download/install.sh | sudo bash
 ```
 
 装完服务就运行在 `http://服务器IP:8765/`，并注册成 systemd 服务，开机自启。脚本最后会打印后台密码。有域名、想用 HTTPS 的话，加上 `DOMAIN=你的域名`，脚本会自动配置 nginx 和证书。
@@ -70,12 +70,15 @@ claude mcp add -s user wecom-excel -- python3 ~/.config/wecom-excel/wecom-mcp.py
 
 ## 隐私与安全
 
+- **只连你信任的服务器。** 服务器在处理请求时能看到调用者的 cookie，并且提供用户端脚本的更新，所以运营者必须是你信任的人。自己部署一份是最稳妥的。
 - 服务器使用 `--caller-cookies-only` 模式运行：只用调用者自己带来的 cookie，不会用服务器上的任何 cookie 兜底。
 - 缓存的键是 cookie 的 SHA-256，不是 cookie 本身。企业微信响应里返回的 Set-Cookie 会被丢弃。
 - 使用统计只记录时间、工具、耗时、结果、账号名、随机安装 ID、IP 和文档 ID/标题。不记录 cookie，也不记录表格内容。数据保留 180 天。
-- 后台密码只存 PBKDF2 哈希。同一个 IP 连续输错 5 次密码，锁定 15 分钟。
+- 后台密码只存 PBKDF2 哈希。
 - 直接开端口时，服务只认 TCP 连接的真实来源 IP，客户端自己填的 `X-Real-IP` 不算数。域名模式下由 nginx 转发真实 IP，并且 `/mcp` 每个 IP 每秒最多 10 个请求（允许瞬时 40 个）。
-- 端口模式是 http，cookie 会明文经过网络，适合内网使用；放到公网上建议用域名模式加 HTTPS。
+- 端口模式是 http，cookie 会明文经过网络，适合内网使用；放到公网上建议用域名模式加 HTTPS。这种情况下说明页会显示提醒，用户端也不会自动更新（防止有人在网络中间替换脚本）。
+- 每次调用的参数有上限（图片最多 50 张、行数最多 1 万行），每个 IP 每秒最多 10 次调用；没带 cookie 的请求不会写进统计。
+- 后台登录：单个 IP 15 分钟内错 5 次锁定；所有 IP 合计每分钟错 30 次，就整体暂停登录一分钟。密码至少 12 位。
 
 ## 开发
 

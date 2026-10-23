@@ -95,24 +95,58 @@ def _use_caller_cookie(ctx: Context | None) -> None:
     request_cookie.set(cookie.strip() if cookie else None)
 
 
-def _recorded(tool):
-    """Record each call of `tool` in the usage log, when there is one: who, which doc, outcome, duration."""
+# Hard caps on what one call may ask for, whatever the caller sends: each picture is downloaded and tiled in
+# memory, and each row rendered.
+LIMITS = {"max_rows": 10_000, "max_images": 50, "max_results": 1000}
+# Tool calls per caller IP on HTTP: RATE a second, bursts of BURST (nginx in front may limit more).
+RATE, BURST = 10.0, 40.0
+_buckets: dict[str, tuple[float, float]] = {}  # ip -> (tokens, last refill)
+_MAX_BUCKETS = 10_000
+
+
+def _request(ctx):
+    return getattr(getattr(ctx, "request_context", None), "request", None) if ctx is not None else None
+
+
+def _allow(ip: str) -> bool:
+    now = time.monotonic()
+    tokens, last = _buckets.pop(ip, (BURST, now))
+    tokens = min(BURST, tokens + (now - last) * RATE)
+    ok = tokens >= 1
+    _buckets[ip] = (tokens - 1 if ok else tokens, now)  # re-inserted: the dict stays in least-recent order
+    while len(_buckets) > _MAX_BUCKETS:
+        del _buckets[next(iter(_buckets))]
+    return ok
+
+
+def _guarded(tool):
+    """Every tool call: clamp the LIMITS arguments, rate-limit HTTP callers by IP, and record the call in the
+    usage log when there is one (who, which doc, outcome, duration). Calls that bring no cookie are not
+    recorded, so nobody can fill the log without a WeCom login."""
 
     sig = inspect.signature(tool)
 
     @functools.wraps(tool)
     async def wrapper(*args, **kwargs):
-        if _usage is None:
-            return await tool(*args, **kwargs)
+        bound = sig.bind_partial(*args, **kwargs)
+        for name, cap in LIMITS.items():
+            if isinstance(bound.arguments.get(name), int):
+                bound.arguments[name] = max(0, min(bound.arguments[name], cap))
+        ctx = bound.arguments.get("ctx")
+        if (request := _request(ctx)) is not None and not _allow(client_ip(request)):
+            raise ToolError("too many requests: wait a few seconds and try again")
+        headers = (ctx.headers if ctx is not None else None) or {}
+        if _usage is None or (request is not None and COOKIE_HEADER not in headers):
+            return await tool(*bound.args, **bound.kwargs)
         start, error = time.monotonic(), None
         try:
-            return await tool(*args, **kwargs)
+            return await tool(*bound.args, **bound.kwargs)
         except Exception as e:
             error = str(e) or type(e).__name__
             raise
         finally:
             try:
-                _record(tool.__name__, sig.bind_partial(*args, **kwargs).arguments, error, start)
+                _record(tool.__name__, bound.arguments, error, start)
             except Exception:  # statistics never break a call
                 logging.getLogger(__name__).exception("recording usage failed")
 
@@ -133,7 +167,7 @@ def _record(name: str, kwargs: dict, error: str | None, start: float) -> None:
     _usage.record(
         tool=name, ok=error is None, error=error, ms=int((time.monotonic() - start) * 1000),
         user=urllib.parse.unquote(headers.get(USER_HEADER, ""))[:100] or None,
-        ip=client_ip(request) if (request := getattr(getattr(ctx, "request_context", None), "request", None)) else None,
+        ip=client_ip(request) if (request := _request(ctx)) else None,
         client=(headers.get("user-agent") or "")[:100] or None,
         pad_id=pad_id, title=title,
         client_id=cid if _CLIENT_ID.fullmatch(cid := headers.get(CLIENT_ID_HEADER, "")) else None,
@@ -213,7 +247,7 @@ def _notes(data) -> str:
 
 
 @mcp.tool(annotations=READ_ONLY)
-@_recorded
+@_guarded
 async def list_sheets(doc: str, ctx: Context = None) -> str:
     """List the tabs of a WeCom online spreadsheet with the range that holds data.
 
@@ -281,7 +315,7 @@ async def list_sheets(doc: str, ctx: Context = None) -> str:
 
 
 @mcp.tool(annotations=READ_ONLY)
-@_recorded
+@_guarded
 async def read_sheet(
     doc: str,
     sheet: str | None = None,
@@ -310,8 +344,8 @@ async def read_sheet(
         format: For text/text_images: csv (compact, default), markdown, json (rows with values), or
             records (list of objects keyed by the first row — use with header=true).
         header: For records: treat the first returned row as column names.
-        max_rows: Truncate after this many rows (default 500).
-        max_images: For text_images/full: return at most this many pictures (default 5); the rest are
+        max_rows: Truncate after this many rows (default 500, at most 10000).
+        max_images: For text_images/full: return at most this many pictures (default 5, at most 50); the rest are
             listed by cell (fetch them with get_images and a narrower range).
         tile: Split pictures too large to be seen at full resolution into overlapping tiles (default true).
         show_formulas: Show formula text (e.g. "=SUM(E2:E22)") instead of the computed value.
@@ -358,7 +392,7 @@ async def read_sheet(
 
 
 @mcp.tool(annotations=READ_ONLY)
-@_recorded
+@_guarded
 async def search_sheet(
     doc: str, query: str, sheet: str | None = None, case_sensitive: bool = False, max_results: int = 100,
     ctx: Context = None,
@@ -370,7 +404,7 @@ async def search_sheet(
         query: Substring to look for.
         sheet: Tab name or id; defaults to the URL's tab, else the first visible tab.
         case_sensitive: Match case exactly (default false).
-        max_results: Stop after this many hits (default 100).
+        max_results: Stop after this many hits (default 100, at most 1000).
     """
     _use_caller_cookie(ctx)
     info, tab, data, _ = await _load(doc, sheet, 0, -1)
@@ -434,7 +468,7 @@ async def _pictures(data, rng: Range, max_images: int, tile: bool = True) -> lis
 
 
 @mcp.tool(annotations=READ_ONLY)
-@_recorded
+@_guarded
 async def get_images(
     doc: str,
     sheet: str | None = None,
@@ -450,7 +484,7 @@ async def get_images(
         doc: Doc URL or padId. A `tab=` in the URL selects the sheet.
         sheet: Tab name or id; defaults to the URL's tab, else the first visible tab.
         range: Only pictures in this A1 range, e.g. "J2:P10" or "L5".
-        max_images: Return at most this many pictures (default 5); the rest are listed by cell.
+        max_images: Return at most this many pictures (default 5, at most 50); the rest are listed by cell.
         list_only: Only list cells, sizes and original-file URLs (no login needed, e.g. for curl),
             without downloading the pictures.
         tile: Split pictures too large to be seen at full resolution (over ~1568 px or ~1.15 MP) into
@@ -569,8 +603,10 @@ def passwd(argv: list[str]) -> None:
             sys.exit("两次输入不一样")
     else:
         password = sys.stdin.readline().rstrip("\n")
-    if not password:
-        sys.exit("密码不能为空")
+    from .admin import MIN_PASSWORD
+
+    if len(password) < MIN_PASSWORD:
+        sys.exit(f"密码至少要 {MIN_PASSWORD} 位")
     path = args.file or os.path.join(args.data_dir, "admin-password")
     _write_admin(path, args.user, password)
     print(f"已保存到 {path}（账号 {args.user}）。已登录的后台会话都已失效。")

@@ -1,7 +1,7 @@
 # Notes for AI assistants
 
 - **Deploying this repo to a server**: follow [DEPLOY.md](DEPLOY.md). On Linux the whole install is
-  `curl -fsSL https://raw.githubusercontent.com/Doone-skser/wecom-excel-mcp/main/deploy/install.sh | sudo bash`
+  `curl -fsSL https://github.com/Doone-skser/wecom-excel-mcp/releases/latest/download/install.sh | sudo bash`
   (prebuilt executable, port 8765, nothing compiled); add `DOMAIN=<domain>` only when the user wants HTTPS.
   Elsewhere: download the release executable and run `wecom-excel-mcp serve`.
 - **Never** print, store or ask the user to paste a WeCom cookie. The server must keep working with each caller's

@@ -53,13 +53,31 @@ def base_url(request: Request, public_url: str = "") -> str:
     return f"{'https' if is_https(request) else 'http'}://{host}"
 
 
+PLAIN_HTTP_NOTE_MD = ("> **注意：这个服务器没有 HTTPS。** 登录凭证（cookie）会明文经过网络，同一网络里的人可能截获它。"
+                      "只在公司内网等可信网络里使用；安装前请把这一点告诉用户。用户端在这种服务器上不会自动更新。")
+PLAIN_HTTP_NOTE_HTML = ('<p style="margin:0 0 16px;padding:10px 14px;border-radius:10px;border:1px solid #e5a50a;'
+                        'background:rgba(229,165,10,.12);font-size:14px;line-height:1.6">'
+                        "<b>注意：这个服务器没有 HTTPS。</b>登录凭证会明文经过网络，只在公司内网等可信网络里使用。</p>")
+
+
+def _plain_http(base: str) -> bool:
+    host = base.split("://", 1)[-1].rsplit(":", 1)[0].strip("[]")
+    return base.startswith("http://") and host not in ("127.0.0.1", "localhost", "::1")
+
+
 def add_routes(mcp, public_url: str = "") -> None:
     files = resources.files(__package__).joinpath("site")
     texts = {name: files.joinpath(name).read_text(encoding="utf-8") for name, _ in FILES.values()}
 
     async def serve(request: Request) -> Response:
         name, media = FILES[request.url.path]
-        body = texts[name].replace(PLACEHOLDER, base_url(request, public_url))
+        base = base_url(request, public_url)
+        body = texts[name].replace(PLACEHOLDER, base)
+        if _plain_http(base):  # say so where people and assistants read first
+            if name == "llms.txt":
+                body = body.replace("\n", "\n\n" + PLAIN_HTTP_NOTE_MD + "\n", 1)
+            elif name == "index.html":
+                body = body.replace("<main>", "<main>\n" + PLAIN_HTTP_NOTE_HTML, 1)
         return PlainTextResponse(body, media_type=media, headers={"Cache-Control": "no-cache"})
 
     for path in FILES:

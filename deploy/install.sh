@@ -2,7 +2,7 @@
 # Install or update the shared wecom-excel MCP server on a Linux host with systemd, as root. Nothing is
 # compiled: it downloads the prebuilt executable from the GitHub release.
 #
-#   curl -fsSL https://raw.githubusercontent.com/Doone-skser/wecom-excel-mcp/main/deploy/install.sh | sudo bash
+#   curl -fsSL https://github.com/Doone-skser/wecom-excel-mcp/releases/latest/download/install.sh | sudo bash
 #
 # By default the server listens on port 8765 of every interface (http://<server ip>:8765/). Settings
 # (environment variables, e.g. `| sudo PORT=9000 bash`):
@@ -14,7 +14,8 @@
 #   ADMIN_USER      the /admin account, default admin
 #   ADMIN_PASSWORD  its password; when unset and no login exists yet, a random one is made and shown once
 #   VERSION         a release tag such as v0.2.0, default the latest
-#   GITHUB_PROXY    a prefix for the download when github.com is slow, e.g. https://ghfast.top/
+#   GITHUB_PROXY    a prefix for downloading the executable when github.com is slow, e.g. https://ghfast.top/;
+#                   the checksum still comes from github.com itself, so the proxy cannot swap the executable
 #   BINARY          install this local executable instead of downloading one
 set -euo pipefail
 
@@ -50,8 +51,11 @@ else
   if [ -n "${VERSION:-}" ]; then base="$REPO_URL/releases/download/$VERSION"; else base="$REPO_URL/releases/latest/download"; fi
   tmp="$(mktemp -d)"
   trap 'rm -rf "$tmp"' EXIT
+  # The checksums always come straight from github.com (small; reachable where the big download is slow),
+  # never through GITHUB_PROXY: a proxy that served both could swap the executable unnoticed.
+  curl -fsSL --retry 3 --max-time 60 -o "$tmp/SHA256SUMS" "$base/SHA256SUMS" \
+    || die "cannot fetch $base/SHA256SUMS from github.com (needed to check the download)"
   curl -fL --retry 3 --progress-bar -o "$tmp/$name" "${GITHUB_PROXY:-}$base/$name"
-  curl -fsSL --retry 3 -o "$tmp/SHA256SUMS" "${GITHUB_PROXY:-}$base/SHA256SUMS"
   (cd "$tmp" && grep " $name\$" SHA256SUMS | sha256sum -c --quiet -) || die "checksum mismatch for $name"
   install -m 755 "$tmp/$name" "$APP/wecom-excel-mcp.new"
 fi

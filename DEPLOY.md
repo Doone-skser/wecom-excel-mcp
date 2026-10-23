@@ -9,7 +9,7 @@
 需要 x86_64 或 arm64 的 Linux，带 systemd，有 root 权限。Ubuntu 20.04+、Debian 10+、CentOS/Rocky/Alma 8+、阿里云 Linux 3 都可以。
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Doone-skser/wecom-excel-mcp/main/deploy/install.sh | sudo bash
+curl -fsSL https://github.com/Doone-skser/wecom-excel-mcp/releases/latest/download/install.sh | sudo bash
 ```
 
 装完后服务就运行在 `http://服务器IP:8765/`，脚本最后会打印说明页、后台地址和后台密码。
@@ -17,12 +17,14 @@ curl -fsSL https://raw.githubusercontent.com/Doone-skser/wecom-excel-mcp/main/de
 - **云服务器**：记得在安全组里放行 TCP 8765。脚本会自动在 ufw/firewalld 里放行，但管不到云厂商的安全组。
 - **换端口**：`curl ... | sudo PORT=9000 bash`
 - **更新**：再运行一次同样的命令。数据和后台密码都会保留。
-- **国内服务器下载 GitHub 慢**：加一个下载代理前缀。
+- **国内服务器下载 GitHub 慢**：给程序本体加一个下载代理前缀。
 
   ```bash
-  curl -fsSL https://ghfast.top/https://raw.githubusercontent.com/Doone-skser/wecom-excel-mcp/main/deploy/install.sh \
+  curl -fsSL https://github.com/Doone-skser/wecom-excel-mcp/releases/latest/download/install.sh \
     | sudo GITHUB_PROXY=https://ghfast.top/ bash
   ```
+
+  安装脚本和校验文件（`SHA256SUMS`）都直接从 github.com 下载。它们很小，国内一般也能下。只有约 28 MB 的程序本体走代理，下载后用 github.com 上的校验文件核对，代理没法偷偷替换它。
 
   也可以先在别处下载 `wecom-excel-mcp-linux-x86_64`，传到服务器上，用 `sudo BINARY=./wecom-excel-mcp-linux-x86_64 bash install.sh` 安装。
 
@@ -33,7 +35,7 @@ curl -fsSL https://raw.githubusercontent.com/Doone-skser/wecom-excel-mcp/main/de
 域名已经解析到服务器，80 和 443 端口已开放，系统是 Debian/Ubuntu 时：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Doone-skser/wecom-excel-mcp/main/deploy/install.sh \
+curl -fsSL https://github.com/Doone-skser/wecom-excel-mcp/releases/latest/download/install.sh \
   | sudo DOMAIN=wecom.example.com EMAIL=you@example.com bash
 ```
 
@@ -51,7 +53,7 @@ curl -fsSL .../deploy/install.sh | sudo DOMAIN=wecom.example.com SKIP_NGINX=1 ba
 
 1. 从 GitHub Release 下载 `wecom-excel-mcp-linux-<架构>`，用 `SHA256SUMS` 校验后放到 `/opt/wecom-excel/wecom-excel-mcp`；
 2. 创建系统用户 `wecom-excel`，数据目录 `/var/lib/wecom-excel`（权限 700）；
-3. 设置后台账号（默认 `admin`）。没有给 `ADMIN_PASSWORD` 时随机生成一个，只打印一次；文件里只存 PBKDF2 哈希；
+3. 设置后台账号（默认 `admin`）。没有给 `ADMIN_PASSWORD` 时随机生成一个，只打印一次；自己设的密码至少 12 位；文件里只存 PBKDF2 哈希；
 4. 写入 systemd 服务 `wecom-excel-http`（`wecom-excel-mcp serve ...`），设为开机自启；
 5. 端口模式下，在 ufw/firewalld 里放行端口；域名模式下，配置 nginx 和证书；
 6. 检查服务确实启动了。

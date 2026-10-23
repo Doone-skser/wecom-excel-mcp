@@ -10,3 +10,10 @@ def decoder_impl(request, monkeypatch):
         pytest.skip("Rust extension not built")
     monkeypatch.setattr(decoder, "USE_NATIVE", request.param == "native")
     return request.param
+
+
+@pytest.fixture(autouse=True)
+def fresh_rate_limits():
+    from wecom_excel_mcp import server
+
+    server._buckets.clear()

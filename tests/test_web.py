@@ -30,3 +30,10 @@ def test_forwarded_proto_only_from_a_local_proxy():
 def test_public_url_wins_and_bad_host_is_ignored():
     assert "https://wecom.test/mcp" in client("https://wecom.test/").get("/llms.txt").text
     assert "<script>" not in client().get("/llms.txt", headers={"host": "x<script>"}).text
+
+
+def test_plain_http_is_flagged():
+    assert "没有 HTTPS" in client().get("/llms.txt").text and "没有 HTTPS" in client().get("/").text
+    assert "没有 HTTPS" not in client("https://wecom.test").get("/llms.txt").text
+    local = TestClient(client().app, base_url="http://127.0.0.1:8765")
+    assert "没有 HTTPS" not in local.get("/").text
