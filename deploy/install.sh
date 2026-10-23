@@ -16,6 +16,8 @@
 #   VERSION         a release tag such as v0.2.0, default the latest
 #   GITHUB_PROXY    a prefix for downloading the executable when github.com is slow, e.g. https://ghfast.top/;
 #                   the checksum still comes from github.com itself, so the proxy cannot swap the executable
+#   SHA256          the executable's checksum, copied from the release page (SHA256SUMS), when github.com itself
+#                   cannot be reached to fetch it
 #   BINARY          install this local executable instead of downloading one
 set -euo pipefail
 
@@ -53,8 +55,17 @@ else
   trap 'rm -rf "$tmp"' EXIT
   # The checksums always come straight from github.com (small; reachable where the big download is slow),
   # never through GITHUB_PROXY: a proxy that served both could swap the executable unnoticed.
-  curl -fsSL --retry 3 --max-time 60 -o "$tmp/SHA256SUMS" "$base/SHA256SUMS" \
-    || die "cannot fetch $base/SHA256SUMS from github.com (needed to check the download)"
+  if [ -n "${SHA256:-}" ]; then
+    printf '%s  %s\n' "$SHA256" "$name" > "$tmp/SHA256SUMS"
+  else
+    # a loop, not --retry-all-errors: curl on Debian 10 / EL8 is older than that option
+    for _ in 1 2 3 4 5 6 7 8; do
+      curl -fsSL --connect-timeout 10 --max-time 30 -o "$tmp/SHA256SUMS" "$base/SHA256SUMS" 2>/dev/null && break
+      sleep 2
+    done
+    [ -s "$tmp/SHA256SUMS" ] || die "cannot reach github.com for $base/SHA256SUMS (needed to check the download);
+       try again, or pass SHA256=<the $name line of SHA256SUMS on the release page>"
+  fi
   curl -fL --retry 3 --progress-bar -o "$tmp/$name" "${GITHUB_PROXY:-}$base/$name"
   (cd "$tmp" && grep " $name\$" SHA256SUMS | sha256sum -c --quiet -) || die "checksum mismatch for $name"
   install -m 755 "$tmp/$name" "$APP/wecom-excel-mcp.new"

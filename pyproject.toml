@@ -1,6 +1,6 @@
 [project]
 name = "wecom-excel-mcp"
-version = "0.2.1"
+version = "0.2.2"
 description = "MCP server that reads WeCom (企业微信) online spreadsheets"
 authors = [
     { name = "Doone_M3", email = "64115840+Doone-skser@users.noreply.github.com" }

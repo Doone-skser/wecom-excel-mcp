@@ -43,6 +43,12 @@ jobs:
           sudo ADMIN_PASSWORD=new-password-123 PORT=9000 bash deploy/install.sh
           test "$(curl -s -o /dev/null -w '%{http_code}' -d 'username=admin&password=new-password-123' http://127.0.0.1:9000/admin/login)" = 303
           ! curl -fs -o /dev/null http://127.0.0.1:8765/
+      - name: a checksum given by hand is used, and a wrong one refused
+        run: |
+          name=wecom-excel-mcp-linux-$([ "$(uname -m)" = aarch64 ] && echo arm64 || echo x86_64)
+          sum=$(curl -fsSL https://github.com/${{ github.repository }}/releases/latest/download/SHA256SUMS | awk -v n="$name" '$2 == n {print $1}')
+          sudo SHA256="$sum" PORT=9000 bash deploy/install.sh > /dev/null
+          ! sudo SHA256=0000000000000000000000000000000000000000000000000000000000000000 bash deploy/install.sh
       - name: a short admin password is refused
         run: "! sudo ADMIN_PASSWORD=short bash deploy/install.sh"
       - name: a release that does not exist is refused

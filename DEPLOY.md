@@ -24,7 +24,11 @@ curl -fsSL https://github.com/Doone-skser/wecom-excel-mcp/releases/latest/downlo
     | sudo GITHUB_PROXY=https://ghfast.top/ bash
   ```
 
-  安装脚本和校验文件（`SHA256SUMS`）都直接从 github.com 下载。它们很小，国内一般也能下。只有约 28 MB 的程序本体走代理，下载后用 github.com 上的校验文件核对，代理没法偷偷替换它。
+  安装脚本和校验文件（`SHA256SUMS`）都直接从 github.com 下载，只有约 28 MB 的程序本体走代理。下载后会用 github.com 上的校验文件核对，所以代理没法偷偷替换程序。
+
+  国内访问 github.com 时好时坏：脚本取校验文件时会自动重试几次；第一行的 curl 超时了，就再运行一次。实在连不上，可以在浏览器里打开 [Releases](https://github.com/Doone-skser/wecom-excel-mcp/releases/latest)，从 `SHA256SUMS` 里复制 `wecom-excel-mcp-linux-x86_64` 那一行的校验值，加上 `SHA256=<校验值>` 运行。
+
+  不建议通过代理下载 `install.sh` 本身：它以 root 运行，经过第三方代理就等于把服务器交给了代理。
 
   也可以先在别处下载 `wecom-excel-mcp-linux-x86_64`，传到服务器上，用 `sudo BINARY=./wecom-excel-mcp-linux-x86_64 bash install.sh` 安装。
 
@@ -58,7 +62,7 @@ curl -fsSL .../deploy/install.sh | sudo DOMAIN=wecom.example.com SKIP_NGINX=1 ba
 5. 端口模式下，在 ufw/firewalld 里放行端口；域名模式下，配置 nginx 和证书；
 6. 检查服务确实启动了。
 
-全部参数：`PORT`、`DOMAIN`、`EMAIL`、`SKIP_NGINX`、`ADMIN_USER`、`ADMIN_PASSWORD`、`VERSION`（例如 `v0.2.0`，默认最新版）、`GITHUB_PROXY`、`BINARY`。说明写在 [`deploy/install.sh`](deploy/install.sh) 开头。
+全部参数：`PORT`、`DOMAIN`、`EMAIL`、`SKIP_NGINX`、`ADMIN_USER`、`ADMIN_PASSWORD`、`VERSION`（例如 `v0.2.1`，默认最新版）、`GITHUB_PROXY`、`SHA256`、`BINARY`。说明写在 [`deploy/install.sh`](deploy/install.sh) 开头。
 
 ## 方式二：任何电脑直接运行（macOS / Windows / Linux）
 
